@@ -18,11 +18,14 @@ import { errorHandler } from "./middleware/errorHandler";
 export function createApp() {
   const app = express();
 
-  // CORS_ORIGIN may hold a comma-separated list, e.g. the local web app and
-  // the Android emulator origin (http://10.0.2.2:3001).
-  const corsOrigin = process.env.CORS_ORIGIN
-    ? process.env.CORS_ORIGIN.split(",").map((origin) => origin.trim())
-    : "*";
+  // CORS_ORIGIN may be "*" (allow any) or a comma-separated list of origins,
+  // e.g. the local web app and the Android emulator origin (http://10.0.2.2:3001).
+  // Note: "*" must be passed as the STRING "*", not ["*"] — the cors package
+  // treats an array as an exact-match allowlist, so ["*"] would never match a
+  // real origin and would silently block every browser request.
+  const corsEnv = process.env.CORS_ORIGIN?.trim();
+  const corsOrigin =
+    !corsEnv || corsEnv === "*" ? "*" : corsEnv.split(",").map((origin) => origin.trim());
   app.use(cors({ origin: corsOrigin, credentials: true }));
   // Registration can include two optional identity documents encoded as data URLs.
   // Keep the limit bounded while allowing two 5 MB uploads plus base64 overhead.
