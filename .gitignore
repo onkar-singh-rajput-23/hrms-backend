@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+
+# local file database (recreate with: npm run seed:clean) — keep PII out of git
+database/
+
+# macOS
+.DS_Store
