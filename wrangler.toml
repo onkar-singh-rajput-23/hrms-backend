@@ -10,7 +10,7 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "hrms"
-database_id = "REPLACE_AFTER_D1_CREATE"
+database_id = "b1095adf-6456-435b-87a1-29dbf8106b1f"
 
 [vars]
 # CORS_ORIGIN: your deployed frontend origin(s), comma-separated. "*" allows any.
