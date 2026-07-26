@@ -1,0 +1,21 @@
+name = "hrms-backend"
+main = "src/worker/index.ts"
+compatibility_date = "2024-09-23"
+# nodejs_compat provides node:async_hooks (AsyncLocalStorage) used by the D1 data layer.
+compatibility_flags = ["nodejs_compat"]
+
+# Cloudflare D1 database binding.
+# Create the database once with:  npx wrangler d1 create hrms
+# then paste the printed database_id below (replacing REPLACE_AFTER_D1_CREATE).
+[[d1_databases]]
+binding = "DB"
+database_name = "hrms"
+database_id = "REPLACE_AFTER_D1_CREATE"
+
+[vars]
+# CORS_ORIGIN: your deployed frontend origin(s), comma-separated. "*" allows any.
+CORS_ORIGIN = "*"
+JWT_EXPIRES_IN = "7d"
+# JWT_SECRET and SEED_SECRET are set as encrypted secrets, NOT here:
+#   npx wrangler secret put JWT_SECRET
+#   npx wrangler secret put SEED_SECRET
