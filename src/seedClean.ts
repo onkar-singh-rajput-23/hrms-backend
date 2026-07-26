@@ -91,7 +91,7 @@ async function run() {
   });
 
   // --- 3. employees + 4. salary structures ---
-  const employeeByCode = new Map<string, string>();
+  const employeeByCode = new Map<string, any>();
   for (const r of ROWS) {
     const emp = await Employee.create({
       employeeCode: r.code,

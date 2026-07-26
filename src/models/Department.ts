@@ -1,14 +1,18 @@
-import { createModel } from "../config/localdb";
+import { Schema, model, Document } from "mongoose";
 
-export interface IDepartment {
-  _id: string;
+export interface IDepartment extends Document {
   name: string;
   description?: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
-// Was: Mongoose model("Department"). Now backed by ./database/departments.json
-export default createModel("departments", {
-  dateFields: ["createdAt", "updatedAt"],
-});
+const departmentSchema = new Schema<IDepartment>(
+  {
+    name: { type: String, required: true, unique: true, trim: true },
+    description: { type: String, trim: true },
+  },
+  { timestamps: true }
+);
+
+export default model<IDepartment>("Department", departmentSchema);

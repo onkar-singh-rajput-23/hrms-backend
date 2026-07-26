@@ -113,7 +113,7 @@ router.put("/requests/:id/approve", authenticate, requireRole("manager"), async 
   if (request.status !== "pending") throw new HttpError(409, "Only pending requests can be approved");
 
   request.status = "approved";
-  request.approver = req.auth?.employeeId;
+  request.approver = req.auth?.employeeId as any; // Mongoose casts the hex string to ObjectId
   await request.save();
 
   const year = new Date(request.startDate).getFullYear();
@@ -147,7 +147,7 @@ router.put("/requests/:id/reject", authenticate, requireRole("manager"), async (
 
   request.status = "rejected";
   request.decisionNote = body.note;
-  request.approver = req.auth?.employeeId;
+  request.approver = req.auth?.employeeId as any; // Mongoose casts the hex string to ObjectId
   await request.save();
   res.json(request);
 });

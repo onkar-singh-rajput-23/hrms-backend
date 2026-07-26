@@ -1,8 +1,7 @@
-import { createModel } from "../config/localdb";
+import { Schema, model, Document, Types } from "mongoose";
 
-export interface ISalaryStructure {
-  _id: string;
-  employee: string;
+export interface ISalaryStructure extends Document {
+  employee: Types.ObjectId;
   basic: number;
   hra: number;
   allowances: number;
@@ -11,9 +10,15 @@ export interface ISalaryStructure {
   updatedAt: Date;
 }
 
-// Was: Mongoose model("SalaryStructure"). Now backed by ./database/salaryStructures.json
-export default createModel("salaryStructures", {
-  dateFields: ["effectiveFrom", "createdAt", "updatedAt"],
-  defaults: { basic: 0, hra: 0, allowances: 0 },
-  refs: { employee: "employees" },
-});
+const salaryStructureSchema = new Schema<ISalaryStructure>(
+  {
+    employee: { type: Schema.Types.ObjectId, ref: "Employee", required: true },
+    basic: { type: Number, required: true, default: 0 },
+    hra: { type: Number, required: true, default: 0 },
+    allowances: { type: Number, required: true, default: 0 },
+    effectiveFrom: { type: Date, required: true, default: () => new Date() },
+  },
+  { timestamps: true }
+);
+
+export default model<ISalaryStructure>("SalaryStructure", salaryStructureSchema);
