@@ -7,7 +7,3 @@ database/
 
 # macOS
 .DS_Store
-
-# Cloudflare Workers / wrangler
-.wrangler/
-.dev.vars

@@ -47,5 +47,3 @@ NEXT_PUBLIC_API_URL=https://hrms-backend-XXXX.onrender.com/api
 ## Notes
 - **Free tier sleeps** after ~15 min idle; the first request then takes ~30–60s to wake.
 - Verify after deploy: open `https://<your-service>.onrender.com/api/health` → `{"status":"ok"}`.
-- The `src/worker/` + `wrangler.toml` files are the older Cloudflare port and are unused
-  on Render — safe to ignore or delete.
