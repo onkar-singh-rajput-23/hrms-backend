@@ -115,6 +115,19 @@ async function run() {
   }
   console.log(`Created ${ROWS.length} employees and salary structures in "${dept.name}".`);
 
+  // Two reporting managers, with the remaining seven employees split 4/3.
+  const teamByManager: Record<string, string[]> = {
+    HP007: ["HP006", "HP010", "HP019", "HP020"],
+    HP016: ["HP021", "HP021-2", "HP022"],
+  };
+  for (const [managerCode, reportCodes] of Object.entries(teamByManager)) {
+    for (const reportCode of reportCodes) {
+      await Employee.findByIdAndUpdate(employeeByCode.get(reportCode)!, {
+        manager: employeeByCode.get(managerCode)!,
+      });
+    }
+  }
+
   // --- 5. payroll run (June 2026) ---
   const payrollRun = await PayrollRun.create({
     month: MONTH,
@@ -191,26 +204,26 @@ async function run() {
 
   const staffLogins = [
     { email: "admin@hurrys.local",   name: "System Admin",   role: "admin" as const },
-    { email: "hr@hurrys.local",      name: "HR Manager",     role: "admin" as const },
-    { email: "manager@hurrys.local", name: "Floor Manager",  role: "manager" as const },
   ];
   for (const s of staffLogins) {
     await User.create({ name: s.name, email: s.email, passwordHash, role: s.role, isActive: true });
     created.push({ email: s.email, role: s.role, name: s.name });
   }
 
+  const managerCodes = new Set(["HP007", "HP016"]);
   for (const r of ROWS) {
     const employeeId = employeeByCode.get(r.code)!;
     const email = emailFor(r.name);
+    const role = managerCodes.has(r.code) ? "manager" : "employee";
     await User.create({
       name: r.name,
       email,
       passwordHash,
-      role: "manager",
+      role,
       employee: employeeId,
       isActive: true,
     });
-    created.push({ email, role: "manager", name: r.name, employeeCode: r.code });
+    created.push({ email, role, name: r.name, employeeCode: r.code });
   }
 
   // --- 10. summary ---

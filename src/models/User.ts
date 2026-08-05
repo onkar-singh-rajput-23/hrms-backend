@@ -29,7 +29,7 @@ const userSchema = new Schema<IUser>(
     name: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
-    role: { type: String, enum: ROLES, default: "manager" },
+    role: { type: String, enum: ROLES, default: "employee" },
     fathersName: { type: String, trim: true },
     temporaryAddress: { type: String, trim: true },
     permanentAddress: { type: String, trim: true },

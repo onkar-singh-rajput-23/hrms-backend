@@ -3,11 +3,13 @@ import { z } from "zod";
 import Employee from "../models/Employee";
 import { authenticate, requireRole, AuthRequest } from "../middleware/auth";
 import { HttpError } from "../middleware/errorHandler";
+import { assertCanActOnEmployee, teamEmployeeIds } from "../utils/team";
 
 const router = Router();
 
-router.get("/", authenticate, requireRole("manager"), async (_req, res) => {
-  const employees = await Employee.find().populate("department").populate("manager", "name employeeCode").sort({ name: 1 });
+router.get("/", authenticate, requireRole("manager"), async (req: AuthRequest, res) => {
+  const filter = req.auth?.role === "admin" ? {} : { _id: { $in: await teamEmployeeIds(req.auth) } };
+  const employees = await Employee.find(filter).populate("department").populate("manager", "name employeeCode").sort({ name: 1 });
   res.json(employees);
 });
 
@@ -18,7 +20,8 @@ router.get("/me", authenticate, async (req: AuthRequest, res) => {
   res.json(employee);
 });
 
-router.get("/:id", authenticate, async (req, res) => {
+router.get("/:id", authenticate, async (req: AuthRequest, res) => {
+  await assertCanActOnEmployee(req.auth, req.params.id);
   const employee = await Employee.findById(req.params.id).populate("department").populate("manager", "name employeeCode");
   if (!employee) throw new HttpError(404, "Employee not found");
   res.json(employee);
@@ -46,14 +49,23 @@ router.post("/", authenticate, requireRole("admin"), async (req, res) => {
 });
 
 const updateSchema = createSchema.partial().extend({
+  manager: z.string().nullable().optional(),
   status: z.enum(["active", "exited"]).optional(),
 });
 
 router.put("/:id", authenticate, requireRole("admin"), async (req, res) => {
   const body = updateSchema.parse(req.body);
+  const update: Record<string, unknown> = {
+    ...body,
+    dateOfJoining: body.dateOfJoining ? new Date(body.dateOfJoining) : undefined,
+  };
+  if (body.manager === null) {
+    delete update.manager;
+    update.$unset = { manager: 1 };
+  }
   const employee = await Employee.findByIdAndUpdate(
     req.params.id,
-    { ...body, dateOfJoining: body.dateOfJoining ? new Date(body.dateOfJoining) : undefined },
+    update,
     { new: true }
   );
   if (!employee) throw new HttpError(404, "Employee not found");

@@ -7,6 +7,7 @@ import PayrollRun from "../models/PayrollRun";
 import Payslip from "../models/Payslip";
 import { authenticate, requireRole, AuthRequest } from "../middleware/auth";
 import { HttpError } from "../middleware/errorHandler";
+import { assertCanManageEmployee, employeeScopeFilter } from "../utils/team";
 
 const router = Router();
 
@@ -92,7 +93,18 @@ router.get("/payslips/me", authenticate, async (req: AuthRequest, res) => {
   res.json(payslips);
 });
 
-router.get("/payslips/employee/:employeeId", authenticate, requireRole("admin"), async (req, res) => {
+router.get("/payslips/team", authenticate, requireRole("manager"), async (req: AuthRequest, res) => {
+  const scope = await employeeScopeFilter(req.auth);
+  const filter = scope ? { ...scope } : {};
+  const payslips = await Payslip.find(filter)
+    .populate("employee", "name employeeCode designation")
+    .populate("payrollRun")
+    .sort({ createdAt: -1 });
+  res.json(payslips);
+});
+
+router.get("/payslips/employee/:employeeId", authenticate, requireRole("manager"), async (req: AuthRequest, res) => {
+  await assertCanManageEmployee(req.auth, req.params.employeeId);
   const payslips = await Payslip.find({ employee: req.params.employeeId }).populate("payrollRun").sort({ createdAt: -1 });
   res.json(payslips);
 });

@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { verifyToken, TokenPayload } from "../utils/jwt";
-import { Role } from "../types/roles";
+import { normalizeRole, Role } from "../types/roles";
 
 export interface AuthRequest extends Request {
   auth?: TokenPayload;
@@ -15,6 +15,7 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
   const token = header.slice("Bearer ".length);
   try {
     req.auth = verifyToken(token);
+    req.auth.role = normalizeRole(req.auth.role);
     next();
   } catch {
     res.status(401).json({ message: "Invalid or expired token" });

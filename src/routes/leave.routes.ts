@@ -7,6 +7,7 @@ import Employee from "../models/Employee";
 import Attendance from "../models/Attendance";
 import { authenticate, requireRole, AuthRequest } from "../middleware/auth";
 import { HttpError } from "../middleware/errorHandler";
+import { assertCanManageEmployee, employeeScopeFilter } from "../utils/team";
 
 const router = Router();
 
@@ -68,9 +69,10 @@ router.get("/requests/me", authenticate, async (req: AuthRequest, res) => {
   res.json(requests);
 });
 
-router.get("/requests", authenticate, requireRole("manager"), async (req, res) => {
+router.get("/requests", authenticate, requireRole("manager"), async (req: AuthRequest, res) => {
   const { status } = req.query;
-  const filter: Record<string, unknown> = {};
+  const scope = await employeeScopeFilter(req.auth);
+  const filter: Record<string, unknown> = scope ? { ...scope } : {};
   if (status) filter.status = String(status);
   const requests = await LeaveRequest.find(filter)
     .populate("leaveType")
@@ -110,6 +112,7 @@ router.post("/requests", authenticate, async (req: AuthRequest, res) => {
 router.put("/requests/:id/approve", authenticate, requireRole("manager"), async (req: AuthRequest, res) => {
   const request = await LeaveRequest.findById(req.params.id);
   if (!request) throw new HttpError(404, "Leave request not found");
+  await assertCanManageEmployee(req.auth, String(request.employee));
   if (request.status !== "pending") throw new HttpError(409, "Only pending requests can be approved");
 
   request.status = "approved";
@@ -143,6 +146,7 @@ router.put("/requests/:id/reject", authenticate, requireRole("manager"), async (
   const body = schema.parse(req.body);
   const request = await LeaveRequest.findById(req.params.id);
   if (!request) throw new HttpError(404, "Leave request not found");
+  await assertCanManageEmployee(req.auth, String(request.employee));
   if (request.status !== "pending") throw new HttpError(409, "Only pending requests can be rejected");
 
   request.status = "rejected";

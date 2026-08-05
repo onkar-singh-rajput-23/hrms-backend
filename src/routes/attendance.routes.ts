@@ -3,6 +3,7 @@ import Attendance from "../models/Attendance";
 import Employee from "../models/Employee";
 import { authenticate, requireRole, AuthRequest } from "../middleware/auth";
 import { HttpError } from "../middleware/errorHandler";
+import { assertCanManageEmployee, employeeScopeFilter } from "../utils/team";
 
 const router = Router();
 
@@ -48,15 +49,17 @@ router.get("/me", authenticate, async (req: AuthRequest, res) => {
   res.json(records);
 });
 
-router.get("/team", authenticate, requireRole("manager"), async (req, res) => {
+router.get("/team", authenticate, requireRole("manager"), async (req: AuthRequest, res) => {
   const { date } = req.query;
-  const filter: Record<string, unknown> = {};
+  const scope = await employeeScopeFilter(req.auth);
+  const filter: Record<string, unknown> = scope ? { ...scope } : {};
   if (date) filter.date = String(date);
   const records = await Attendance.find(filter).populate("employee", "name employeeCode department").sort({ date: -1 }).limit(200);
   res.json(records);
 });
 
-router.get("/employee/:employeeId", authenticate, requireRole("manager"), async (req, res) => {
+router.get("/employee/:employeeId", authenticate, requireRole("manager"), async (req: AuthRequest, res) => {
+  await assertCanManageEmployee(req.auth, req.params.employeeId);
   const employee = await Employee.findById(req.params.employeeId);
   if (!employee) throw new HttpError(404, "Employee not found");
   const records = await Attendance.find({ employee: req.params.employeeId }).sort({ date: -1 }).limit(90);

@@ -4,6 +4,7 @@ import DailyTask from "../models/DailyTask";
 import Employee from "../models/Employee";
 import { authenticate, requireRole, AuthRequest } from "../middleware/auth";
 import { HttpError } from "../middleware/errorHandler";
+import { assertCanManageEmployee, employeeScopeFilter } from "../utils/team";
 
 const router = Router();
 
@@ -16,8 +17,6 @@ async function assertEmployeeExists(employeeId: string): Promise<void> {
   if (!employee) throw new HttpError(404, "Employee not found");
 }
 
-const statusSchema = z.enum(["todo", "in_progress", "done"]);
-
 router.get("/me", authenticate, async (req: AuthRequest, res) => {
   const employeeId = req.auth?.employeeId;
   if (!employeeId) throw new HttpError(400, "No employee record linked to this account");
@@ -27,10 +26,14 @@ router.get("/me", authenticate, async (req: AuthRequest, res) => {
   res.json(tasks);
 });
 
-router.get("/", authenticate, requireRole("admin"), async (req, res) => {
+router.get("/", authenticate, requireRole("manager"), async (req: AuthRequest, res) => {
   const date = String(req.query.date || todayStr());
-  const filter: Record<string, unknown> = { date };
-  if (req.query.employeeId) filter.employee = String(req.query.employeeId);
+  const scope = await employeeScopeFilter(req.auth);
+  const filter: Record<string, unknown> = { date, ...(scope || {}) };
+  if (req.query.employeeId) {
+    await assertCanManageEmployee(req.auth, String(req.query.employeeId));
+    filter.employee = String(req.query.employeeId);
+  }
 
   const tasks = await DailyTask.find(filter).populate("employee", "name employeeCode designation").sort({ createdAt: 1 });
   res.json(tasks);
@@ -41,39 +44,41 @@ const createSchema = z.object({
   date: z.string().min(1).default(todayStr),
   title: z.string().min(1),
   description: z.string().optional(),
-  status: statusSchema.default("todo"),
 });
 
-router.post("/", authenticate, requireRole("admin"), async (req: AuthRequest, res) => {
+router.post("/", authenticate, requireRole("manager"), async (req: AuthRequest, res) => {
   const body = createSchema.parse(req.body);
   await assertEmployeeExists(body.employeeId);
+  await assertCanManageEmployee(req.auth, body.employeeId);
 
   const task = await DailyTask.create({
     employee: body.employeeId,
     date: body.date,
     title: body.title,
     description: body.description,
-    status: body.status,
+    status: "todo",
     createdBy: req.auth?.userId,
   });
 
   res.status(201).json(task);
 });
 
-const updateSchema = createSchema.partial().extend({
-  status: statusSchema.optional(),
-});
+const updateSchema = createSchema.partial();
 
-router.put("/:id", authenticate, requireRole("admin"), async (req, res) => {
+router.put("/:id", authenticate, requireRole("manager"), async (req: AuthRequest, res) => {
   const body = updateSchema.parse(req.body);
   if (body.employeeId) await assertEmployeeExists(body.employeeId);
+
+  const existing = await DailyTask.findById(req.params.id);
+  if (!existing) throw new HttpError(404, "Task not found");
+  await assertCanManageEmployee(req.auth, String(existing.employee));
+  if (body.employeeId) await assertCanManageEmployee(req.auth, body.employeeId);
 
   const update = {
     employee: body.employeeId,
     date: body.date,
     title: body.title,
     description: body.description,
-    status: body.status,
   };
 
   const task = await DailyTask.findByIdAndUpdate(req.params.id, update, { new: true }).populate(
@@ -85,7 +90,7 @@ router.put("/:id", authenticate, requireRole("admin"), async (req, res) => {
 });
 
 const statusUpdateSchema = z.object({
-  status: statusSchema,
+  status: z.enum(["todo", "in_progress", "pending_approval"]),
 });
 
 router.patch("/:id/status", authenticate, async (req: AuthRequest, res) => {
@@ -93,16 +98,44 @@ router.patch("/:id/status", authenticate, async (req: AuthRequest, res) => {
   const task = await DailyTask.findById(req.params.id);
   if (!task) throw new HttpError(404, "Task not found");
 
-  const isAdmin = req.auth?.role === "admin";
   const isOwnTask = req.auth?.employeeId && String(task.employee) === req.auth.employeeId;
-  if (!isAdmin && !isOwnTask) throw new HttpError(403, "You do not have permission to update this task");
+  if (!isOwnTask) throw new HttpError(403, "You can only update your own task");
+  if (task.status === "approved" || task.status === "done") {
+    throw new HttpError(409, "A completed task must be reviewed by your manager");
+  }
 
   task.status = body.status;
   await task.save();
   res.json(task);
 });
 
-router.delete("/:id", authenticate, requireRole("admin"), async (req, res) => {
+const reviewSchema = z.object({ action: z.enum(["approve", "reopen"]) });
+
+router.patch("/:id/review", authenticate, requireRole("manager"), async (req: AuthRequest, res) => {
+  const { action } = reviewSchema.parse(req.body);
+  const task = await DailyTask.findById(req.params.id);
+  if (!task) throw new HttpError(404, "Task not found");
+  await assertCanManageEmployee(req.auth, String(task.employee));
+
+  if (action === "approve") {
+    if (task.status !== "pending_approval" && task.status !== "done") {
+      throw new HttpError(409, "Only submitted tasks can be approved");
+    }
+    task.status = "approved";
+  } else {
+    if (task.status !== "pending_approval" && task.status !== "approved" && task.status !== "done") {
+      throw new HttpError(409, "Only submitted or approved tasks can be reopened");
+    }
+    task.status = "in_progress";
+  }
+  await task.save();
+  res.json(task);
+});
+
+router.delete("/:id", authenticate, requireRole("manager"), async (req: AuthRequest, res) => {
+  const existing = await DailyTask.findById(req.params.id);
+  if (!existing) throw new HttpError(404, "Task not found");
+  await assertCanManageEmployee(req.auth, String(existing.employee));
   const task = await DailyTask.findByIdAndDelete(req.params.id);
   if (!task) throw new HttpError(404, "Task not found");
   res.status(204).send();

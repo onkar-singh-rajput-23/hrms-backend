@@ -5,7 +5,7 @@ import User from "../models/User";
 import { signToken } from "../utils/jwt";
 import { authenticate, requireRole, AuthRequest } from "../middleware/auth";
 import { HttpError } from "../middleware/errorHandler";
-import { ROLES, PUBLIC_ROLES } from "../types/roles";
+import { normalizeRole, ROLES, PUBLIC_ROLES } from "../types/roles";
 
 const router = Router();
 
@@ -13,7 +13,7 @@ const registerSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(6),
-  role: z.enum(ROLES).default("manager"),
+  role: z.enum(ROLES).default("employee"),
   employeeId: z.string().optional(),
 });
 
@@ -64,11 +64,11 @@ const signupSchema = z.object({
     .optional(),
   email: z.string().email(),
   password: z.string().min(6),
-  role: z.enum(PUBLIC_ROLES).default("manager"),
+  role: z.enum(PUBLIC_ROLES).default("employee"),
 });
 
-// Public self-service sign-up creates manager accounts. Admin access is only
-// granted by an existing admin through the protected role-management flow.
+// Public self-service sign-up creates employee accounts. Manager and admin access are
+// only granted by an existing admin through the protected role-management flow.
 // New accounts have no linked Employee record yet — HR links the account to an Employee profile
 // afterwards from the Employees screen.
 router.post("/signup", async (req, res) => {
@@ -123,9 +123,15 @@ router.post("/login", async (req, res) => {
   const match = await bcrypt.compare(body.password, user.passwordHash);
   if (!match) throw new HttpError(401, "Invalid email or password");
 
+  const normalizedRole = normalizeRole(user.role);
+  if (normalizedRole !== user.role) {
+    user.role = normalizedRole;
+    await user.save();
+  }
+
   const token = signToken({
     userId: String(user._id),
-    role: user.role,
+    role: normalizedRole,
     employeeId: user.employee ? String(user.employee) : undefined,
   });
 
@@ -135,7 +141,7 @@ router.post("/login", async (req, res) => {
       id: user._id,
       name: user.name,
       email: user.email,
-      role: user.role,
+      role: normalizedRole,
       employeeId: user.employee,
     },
   });
@@ -148,7 +154,7 @@ router.get("/me", authenticate, async (req: AuthRequest, res) => {
     id: user._id,
     name: user.name,
     email: user.email,
-    role: user.role,
+    role: normalizeRole(user.role),
     employee: user.employee,
   });
 });

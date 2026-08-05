@@ -5,7 +5,7 @@ export interface IDailyTask extends Document {
   date: string; // YYYY-MM-DD
   title: string;
   description?: string;
-  status: "todo" | "in_progress" | "done";
+  status: "todo" | "in_progress" | "done" | "pending_approval" | "approved";
   createdBy?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -17,7 +17,7 @@ const dailyTaskSchema = new Schema<IDailyTask>(
     date: { type: String, required: true },
     title: { type: String, required: true, trim: true },
     description: { type: String, trim: true },
-    status: { type: String, enum: ["todo", "in_progress", "done"], default: "todo" },
+    status: { type: String, enum: ["todo", "in_progress", "done", "pending_approval", "approved"], default: "todo" },
     createdBy: { type: Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }
