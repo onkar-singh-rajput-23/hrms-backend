@@ -4,6 +4,7 @@ import Employee from "../models/Employee";
 import { authenticate, requireRole, AuthRequest } from "../middleware/auth";
 import { HttpError } from "../middleware/errorHandler";
 import { assertCanActOnEmployee, teamEmployeeIds } from "../utils/team";
+import { provisionEmployeeForUser } from "../utils/provisionEmployee";
 
 const router = Router();
 
@@ -28,7 +29,8 @@ router.get("/:id", authenticate, async (req: AuthRequest, res) => {
 });
 
 const createSchema = z.object({
-  employeeCode: z.string().min(1),
+  /** Optional — generated as the next free HPnnn when the admin leaves it blank. */
+  employeeCode: z.string().min(1).optional(),
   name: z.string().min(1),
   email: z.string().email(),
   phone: z.string().optional(),
@@ -41,6 +43,27 @@ const createSchema = z.object({
 
 router.post("/", authenticate, requireRole("admin"), async (req, res) => {
   const body = createSchema.parse(req.body);
+
+  // No code supplied: reuse the same provisioning path as sign-up so numbering stays consistent.
+  if (!body.employeeCode) {
+    const employee = await provisionEmployeeForUser({
+      name: body.name,
+      email: body.email,
+      managerId: body.manager,
+      designation: body.designation,
+      dateOfJoining: body.dateOfJoining ? new Date(body.dateOfJoining) : undefined,
+      basicSalary: body.basicSalary,
+    });
+    // provisionEmployeeForUser only sets the fields it knows about; apply the rest.
+    if (body.phone || body.department) {
+      employee.phone = body.phone ?? employee.phone;
+      employee.department = (body.department ?? employee.department) as typeof employee.department;
+      await employee.save();
+    }
+    res.status(201).json(employee);
+    return;
+  }
+
   const employee = await Employee.create({
     ...body,
     dateOfJoining: body.dateOfJoining ? new Date(body.dateOfJoining) : new Date(),

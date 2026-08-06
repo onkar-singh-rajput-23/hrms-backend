@@ -6,6 +6,7 @@ import { signToken } from "../utils/jwt";
 import { authenticate, requireRole, AuthRequest } from "../middleware/auth";
 import { HttpError } from "../middleware/errorHandler";
 import { normalizeRole, ROLES, PUBLIC_ROLES } from "../types/roles";
+import { provisionEmployeeForUser } from "../utils/provisionEmployee";
 
 const router = Router();
 
@@ -132,7 +133,22 @@ router.post("/signup", async (req, res) => {
     reportingManager: body.reportingManagerId,
   });
 
-  const token = signToken({ userId: String(user._id), role: user.role });
+  // Every staff member needs an Employee record: it is what the Employees screen lists and what
+  // attendance, leave, tasks and payslips hang off. Created here so registering is enough.
+  const employee = await provisionEmployeeForUser({
+    name: body.name,
+    email: body.email,
+    managerId: body.reportingManagerId,
+  });
+  user.employee = employee._id as typeof user.employee;
+  await user.save();
+
+  // employeeId must be in the token, otherwise the new account's own records 404 until re-login.
+  const token = signToken({
+    userId: String(user._id),
+    role: user.role,
+    employeeId: String(employee._id),
+  });
 
   res.status(201).json({
     token,
@@ -142,6 +158,7 @@ router.post("/signup", async (req, res) => {
       email: user.email,
       role: user.role,
       employeeId: user.employee,
+      employeeCode: employee.employeeCode,
     },
   });
 });
