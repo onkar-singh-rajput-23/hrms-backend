@@ -19,6 +19,12 @@ export interface IUser extends Document {
   panDocumentMimeType?: string;
   panDocumentData?: string;
   employee?: Types.ObjectId;
+  /**
+   * Manager chosen at sign-up, held as an Employee id. A new account has no Employee record
+   * yet, so this parks the choice until HR links/creates one and copies it to `Employee.manager`
+   * (the field team scoping actually reads).
+   */
+  reportingManager?: Types.ObjectId;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -43,6 +49,7 @@ const userSchema = new Schema<IUser>(
     panDocumentMimeType: { type: String, trim: true },
     panDocumentData: { type: String },
     employee: { type: Schema.Types.ObjectId, ref: "Employee" },
+    reportingManager: { type: Schema.Types.ObjectId, ref: "Employee" },
     isActive: { type: Boolean, default: true },
   },
   { timestamps: true }

@@ -65,16 +65,51 @@ const signupSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
   role: z.enum(PUBLIC_ROLES).default("employee"),
+  /** Employee id of the chosen reporting manager, from GET /auth/managers. */
+  reportingManagerId: z.string().optional(),
 });
 
-// Public self-service sign-up creates employee accounts. Manager and admin access are
+/**
+ * Employee ids of accounts that can be picked as a reporting manager: role `manager` (or `admin`)
+ * with a linked Employee record, since `Employee.manager` points at an Employee.
+ */
+async function selectableManagers(): Promise<{ id: string; name: string }[]> {
+  const managers = await User.find({ role: { $in: ["manager", "admin"] }, employee: { $ne: null } })
+    .select("name employee")
+    .populate<{ employee: { _id: unknown; name: string } }>("employee", "name")
+    .sort({ name: 1 });
+
+  return managers
+    .filter((m) => m.employee)
+    .map((m) => ({ id: String(m.employee._id), name: m.employee.name || m.name }));
+}
+
+/**
+ * Public: the sign-up form needs this before the user has a token. Deliberately exposes only
+ * the employee id and display name — no emails or other contact details.
+ */
+router.get("/managers", async (_req, res) => {
+  res.json(await selectableManagers());
+});
+
+// Public self-service sign-up creates employee or manager accounts. Admin access is
 // only granted by an existing admin through the protected role-management flow.
 // New accounts have no linked Employee record yet — HR links the account to an Employee profile
-// afterwards from the Employees screen.
+// afterwards from the Employees screen, at which point `reportingManager` becomes Employee.manager.
 router.post("/signup", async (req, res) => {
   const body = signupSchema.parse(req.body);
   const existing = await User.findOne({ email: body.email });
   if (existing) throw new HttpError(409, "A user with this email already exists");
+
+  // Validate the chosen manager, and require one for employees whenever any manager exists.
+  const managers = await selectableManagers();
+  if (body.reportingManagerId) {
+    if (!managers.some((m) => m.id === body.reportingManagerId)) {
+      throw new HttpError(400, "Select a valid reporting manager");
+    }
+  } else if (body.role === "employee" && managers.length > 0) {
+    throw new HttpError(400, "Select your reporting manager");
+  }
 
   const passwordHash = await bcrypt.hash(body.password, 10);
   const user = await User.create({
@@ -94,6 +129,7 @@ router.post("/signup", async (req, res) => {
     email: body.email,
     passwordHash,
     role: body.role,
+    reportingManager: body.reportingManagerId,
   });
 
   const token = signToken({ userId: String(user._id), role: user.role });

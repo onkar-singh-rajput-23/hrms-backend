@@ -1,9 +1,9 @@
 export const ROLES = ["employee", "manager", "admin"] as const;
 export type Role = (typeof ROLES)[number];
 
-// Public registration creates employee accounts. Manager and admin access are
-// granted by an existing admin through the Users screen or protected registration API.
-export const PUBLIC_ROLES = ["employee"] as const;
+// Public registration lets a person sign up as an employee or a manager. Admin access is
+// only granted by an existing admin through the Users screen or protected registration API.
+export const PUBLIC_ROLES = ["employee", "manager"] as const;
 export type PublicRole = (typeof PUBLIC_ROLES)[number];
 
 /** True for roles that supervise a team: they may act on their direct reports. */
