@@ -4,6 +4,7 @@ import User from "../models/User";
 import { authenticate, requireRole, AuthRequest } from "../middleware/auth";
 import { HttpError } from "../middleware/errorHandler";
 import { normalizeRole, ROLES } from "../types/roles";
+import { provisionEmployeeForUser } from "../utils/provisionEmployee";
 
 const router = Router();
 
@@ -15,6 +16,34 @@ router.get("/", authenticate, requireRole("admin"), async (_req, res) => {
     .sort({ name: 1 });
   for (const user of users) user.role = normalizeRole(user.role);
   res.json(users);
+});
+
+/**
+ * Repair for accounts created before sign-up provisioned an Employee record: without one they
+ * are invisible on the Employees screen and cannot own attendance, leave, tasks or payslips.
+ *
+ * Idempotent, and admin-only. Admin logins carry no employee identity, so they are skipped.
+ * Same logic as the `npm run backfill:employees` CLI, reachable when only the API is available.
+ */
+router.post("/backfill-employees", authenticate, requireRole("admin"), async (_req, res) => {
+  const users = await User.find({
+    employee: { $in: [null, undefined] },
+    role: { $in: ["employee", "manager"] },
+  });
+
+  const linked: { email: string; employeeCode: string }[] = [];
+  for (const user of users) {
+    const employee = await provisionEmployeeForUser({
+      name: user.name,
+      email: user.email,
+      managerId: user.reportingManager ? String(user.reportingManager) : undefined,
+    });
+    user.employee = employee._id as typeof user.employee;
+    await user.save();
+    linked.push({ email: user.email, employeeCode: employee.employeeCode });
+  }
+
+  res.json({ scanned: users.length, linked });
 });
 
 const roleSchema = z.object({ role: z.enum(ROLES) });
