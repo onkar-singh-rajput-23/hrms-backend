@@ -200,6 +200,49 @@ router.post("/login", async (req, res) => {
   });
 });
 
+const identifierSchema = z.string().trim().min(3, "Enter your email or mobile number");
+
+/**
+ * Matches on either the login email or the Aadhaar-linked mobile number collected at
+ * sign-up — there is no separate "phone" field on User, so this is the only phone-like
+ * identifier accounts have.
+ */
+async function findUserByIdentifier(identifier: string) {
+  const normalized = identifier.trim();
+  return User.findOne({
+    $or: [{ email: normalized.toLowerCase() }, { aadhaarLinkedMobileNumber: normalized }],
+  });
+}
+
+const forgotPasswordCheckSchema = z.object({ identifier: identifierSchema });
+
+// Intentionally no email/OTP verification: by product decision, matching the account's
+// email or mobile number is treated as sufficient to proceed to setting a new password.
+router.post("/forgot-password/check", async (req, res) => {
+  const body = forgotPasswordCheckSchema.parse(req.body);
+  const user = await findUserByIdentifier(body.identifier);
+  if (!user || !user.isActive) {
+    throw new HttpError(404, "No account found with that email or mobile number");
+  }
+  res.json({ name: user.name });
+});
+
+const resetPasswordSchema = z.object({
+  identifier: identifierSchema,
+  newPassword: z.string().min(6, "Password must be at least 6 characters"),
+});
+
+router.post("/forgot-password/reset", async (req, res) => {
+  const body = resetPasswordSchema.parse(req.body);
+  const user = await findUserByIdentifier(body.identifier);
+  if (!user || !user.isActive) {
+    throw new HttpError(404, "No account found with that email or mobile number");
+  }
+  user.passwordHash = await bcrypt.hash(body.newPassword, 10);
+  await user.save();
+  res.json({ message: "Password reset successfully" });
+});
+
 router.get("/me", authenticate, async (req: AuthRequest, res) => {
   const user = await User.findById(req.auth!.userId).populate("employee");
   if (!user) throw new HttpError(404, "User not found");
